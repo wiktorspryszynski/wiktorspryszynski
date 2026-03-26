@@ -1,9 +1,8 @@
 # GitHub ASCII Stats
+Automatically generates a **colorful ASCII art image** of your GitHub stats and updates your `README.md` daily via GitHub Actions.
 
 ## Credits
 I got the inspiration from [Andrew6rant's repo](https://github.com/Andrew6rant/Andrew6rant). Please check him out!
-
-Automatically generates a **colorful ASCII art image** of your GitHub stats and updates your `README.md` daily via GitHub Actions.
 
 ---
 
