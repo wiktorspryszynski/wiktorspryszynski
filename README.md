@@ -1,19 +1,7 @@
+# Hi, I'm Wiktor Spryszyński
 
-    # Hi 👋
+## GitHub summary (generated PNG)
 
-    ## 📊 Stats
+![GitHub summary](profile_summary.png)
 
-    ~~~
-    
-        ╔══════════════════════════════╗
-        ║        GITHUB STATS          ║
-        ╠══════════════════════════════╣
-        ║ Repositories :             6 ║
-        ║ Followers    :             0 ║
-        ║ Updated      :    2026-03-26 ║
-        ╚══════════════════════════════╝
-        
-    ~~~
-
-    _Last update: 2026-03-26 18:15:07.570301_
-    
+_Last updated: 2026-03-26T23:13:31+00:00 UTC - cached: no_
