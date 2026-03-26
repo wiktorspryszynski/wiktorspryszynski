@@ -60,7 +60,7 @@ readme_content = f"""# My GitHub Stats
 
 ![My GitHub Stats]({img_path})
 
-_Last update: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}_  
+_Last update: {datetime.now().strftime('%Y-%m-%d %H:%M:%S UTC')}_  
 """
 
 with open("README.md", "w", encoding="utf-8") as f:
