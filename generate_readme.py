@@ -1,51 +1,69 @@
+import os
 import requests
-from datetime import datetime, UTC
+from pyfiglet import figlet_format
+from PIL import Image, ImageDraw, ImageFont
+from datetime import datetime
 
+# --- CONFIG ---
 USERNAME = "wiktorspryszynski"
+TOKEN = os.environ["GH_TOKEN"]
 
+GRAPHQL_URL = "https://api.github.com/graphql"
 
-def get_github_data():
-    url = f"https://api.github.com/users/{USERNAME}"
-    response = requests.get(url)
-    data = response.json()
-
-    return {
-        "repos": data.get("public_repos", 0),
-        "followers": data.get("followers", 0),
+# --- FETCH DATA FROM GRAPHQL ---
+query = """
+{
+  user(login: "%s") {
+    contributionsCollection {
+      totalCommitContributions
     }
+    repositories(first: 50, orderBy: {field: STARGAZERS, direction: DESC}) {
+      totalCount
+    }
+  }
+}
+""" % USERNAME
 
+headers = {"Authorization": f"Bearer {TOKEN}"}
+r = requests.post(GRAPHQL_URL, json={"query": query}, headers=headers)
+data = r.json()
 
-def generate_ascii(data):
-    return f"""
-        ╔══════════════════════════════╗
-        ║        GITHUB STATS          ║
-        ╠══════════════════════════════╣
-        ║ Repositories : {data['repos']:>10} ║
-        ║ Followers    : {data['followers']:>10} ║
-        ║ Updated      : {datetime.now(UTC).strftime("%Y-%m-%d")} ║
-        ╚══════════════════════════════╝
-        """
+total_commits = data["data"]["user"]["contributionsCollection"]["totalCommitContributions"]
+total_repos = data["data"]["user"]["repositories"]["totalCount"]
 
+# --- CREATE ASCII ART ---
+ascii_text = figlet_format("MY STATS", font="slant")
+stats_text = f"Total commits: {total_commits}\nTotal repos: {total_repos}\nLast updated: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}"
+full_text = ascii_text + "\n" + stats_text
 
-def main():
-    data = get_github_data()
-    ascii_block = generate_ascii(data)
+# --- CREATE IMAGE ---
+lines = full_text.split("\n")
+width = max(len(line) for line in lines) * 12
+height = len(lines) * 20
 
-    readme_content = f"""
-    # Hi 👋
+img = Image.new("RGB", (width, height), color="black")
+draw = ImageDraw.Draw(img)
+font = ImageFont.load_default()
 
-    ## 📊 Stats
+# Gradient colors
+colors = [(255,0,0), (255,165,0), (255,255,0), (0,255,0), (0,0,255), (75,0,130), (238,130,238)]
 
-    ~~~
-    {ascii_block}
-    ~~~
+for i, line in enumerate(lines):
+    color = colors[i % len(colors)]
+    draw.text((0, i*20), line, fill=color, font=font)
 
-    _Last update: {datetime.now(UTC)}_
-    """
+img_path = "ascii_stats.png"
+img.save(img_path)
 
-    with open("README.md", "w", encoding="utf-8") as f:
-        f.write(readme_content)
+# --- WRITE README.md ---
+readme_content = f"""# My GitHub Stats
 
+![My GitHub Stats]({img_path})
 
-if __name__ == "__main__":
-    main()
+_Last update: {datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC')}_  
+"""
+
+with open("README.md", "w", encoding="utf-8") as f:
+    f.write(readme_content)
+
+print("README.md updated!")
