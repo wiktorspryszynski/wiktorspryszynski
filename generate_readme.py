@@ -322,6 +322,7 @@ def render_image(stats: dict, cached: bool) -> None:
         (make_title("GITHUB INFO", ROW_WIDTH), COLOR_GREEN, None, None),
         (make_row("Commits", format_number(stats["total_commits_all_time"]), ROW_WIDTH), COLOR_WHITE, None, None),
         (make_row("Public repos", format_number(stats["repos"]), ROW_WIDTH), COLOR_WHITE, None, None),
+        # Only keep the colored lines for lines added/removed
         (
             make_row("Lines added", f"++ {format_number(stats['lines_added'])}", ROW_WIDTH),
             COLOR_WHITE,
@@ -335,12 +336,7 @@ def render_image(stats: dict, cached: bool) -> None:
             COLOR_RED,
         ),
         (make_row("Net lines", f"{stats['net_lines']:+,}", ROW_WIDTH), COLOR_WHITE, None, None),
-        (
-            make_row("Active days (this year)", f"{stats['active_days']}", ROW_WIDTH),
-            COLOR_WHITE,
-            None,
-            None,
-        ),
+        (make_row("Active days (this year)", f"{stats['active_days']}", ROW_WIDTH), COLOR_WHITE, None, None),
         ("", COLOR_WHITE, None, None),
         (make_title("TOP LANGUAGES", ROW_WIDTH), COLOR_RED, None, None),
     ]
