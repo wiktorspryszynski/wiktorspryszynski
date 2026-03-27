@@ -49,6 +49,7 @@ Edit `generate_readme.py`:
 
 ```python
 USERNAME = "your_github_username"
+BIRTHDAY_DAY, BIRTHDAY_MONTH, BIRTHDAY_YEAR = x, y, z
 ```
 
 Script will fetch your stats, generate ASCII art PNG, and update `README.md`.

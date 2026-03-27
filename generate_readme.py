@@ -2,17 +2,20 @@ import json
 import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-
 import requests
 from PIL import Image, ImageDraw, ImageFont
 
 USERNAME = "wiktorspryszynski"
+BIRTHDAY_DAY, BIRTHDAY_MONTH, BIRTHDAY_YEAR = 27, 3, 2000
+BIRTHDAY = datetime(BIRTHDAY_YEAR, BIRTHDAY_MONTH, BIRTHDAY_DAY, tzinfo=timezone.utc)
 GRAPHQL_URL = "https://api.github.com/graphql"
 IMAGE_PATH = Path("profile_summary.png")
 CACHE_PATH = Path("cache/github_stats.json")
+FONT_PATH = Path("./fonts/CascadiaCode.ttf")
+NOW_DT = datetime.now(timezone.utc)
 CACHE_TTL_SECONDS = 60 * 60  # keep cached payload for one hour
 TOKEN = os.environ.get("GH_TOKEN")
-LOCAL_FONT_PATH = "./fonts/CascadiaCode.ttf"
+BIRTHDAY_EMOJI = "\U0001F382"
 
 if not TOKEN:
     raise SystemExit("GH_TOKEN environment variable must be set before running this script.")
@@ -36,6 +39,7 @@ query ($login: String!) {
       }
     }
     contributionsCollection {
+      contributionYears
       totalCommitContributions
       totalPullRequestContributions
       totalRepositoriesWithContributedCommits
@@ -43,7 +47,6 @@ query ($login: String!) {
         totalContributions
         weeks {
           contributionDays {
-            date
             contributionCount
           }
         }
@@ -59,6 +62,16 @@ query ($login: String!) {
           }
         }
       }
+    }
+  }
+}
+"""
+
+YEARLY_COMMITS_QUERY = """
+query ($login: String!, $from: DateTime!, $to: DateTime!) {
+  user(login: $login) {
+    contributionsCollection(from: $from, to: $to) {
+      totalCommitContributions
     }
   }
 }
@@ -87,7 +100,7 @@ def load_cache() -> dict | None:
         fetched_at = datetime.fromisoformat(payload["fetched_at"])
     except (ValueError, KeyError):
         return None
-    if datetime.now(timezone.utc) - fetched_at <= timedelta(seconds=CACHE_TTL_SECONDS):
+    if NOW_DT - fetched_at <= timedelta(seconds=CACHE_TTL_SECONDS):
         return payload["data"]
     return None
 
@@ -100,7 +113,7 @@ def save_cache(data: dict) -> None:
 
 def get_stats() -> tuple[dict, bool]:
     cached = load_cache()
-    required_keys = {"active_days_this_year", "current_year_day", "languages", "fetched_at"}
+    required_keys = {"active_days", "total_commits_all_time", "languages", "fetched_at"}
     if cached and required_keys.issubset(cached):
         return cached, True
     raw = run_query(QUERY, {"login": USERNAME})["user"]
@@ -114,14 +127,12 @@ def build_stats(user: dict) -> dict:
     calendar = contributions["contributionCalendar"] or {}
 
     weeks = calendar.get("weeks") or []
-    now_utc = datetime.now(timezone.utc)
-    current_year = now_utc.year
-    current_year_day = now_utc.timetuple().tm_yday
+    NOW_DT = datetime.now(timezone.utc)
     active_days = sum(
         1
         for week in weeks
         for day in week.get("contributionDays", [])
-        if day.get("contributionCount", 0) > 0 and day.get("date", "").startswith(f"{current_year}-")
+        if day.get("contributionCount", 0) > 0
     )
 
     additions = deletions = merged_prs = 0
@@ -134,6 +145,16 @@ def build_stats(user: dict) -> dict:
             deletions += pr.get("deletions") or 0
             if pr.get("merged"):
                 merged_prs += 1
+
+    total_commits_all_time = 0
+    for year in contributions.get("contributionYears", []):
+        from_dt = f"{year}-01-01T00:00:00Z"
+        to_dt = f"{year}-12-31T23:59:59Z"
+        year_data = run_query(
+            YEARLY_COMMITS_QUERY,
+            {"login": USERNAME, "from": from_dt, "to": to_dt},
+        )
+        total_commits_all_time += year_data["user"]["contributionsCollection"]["totalCommitContributions"]
 
     language_totals: dict[str, int] = {}
     for repo in user["repositories"]["nodes"]:
@@ -164,11 +185,12 @@ def build_stats(user: dict) -> dict:
             }
         )
 
-    fetched_at = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+    fetched_at = NOW_DT.replace(microsecond=0).isoformat()
 
     return {
         "display_name": user.get("name") or user["login"],
         "total_commits": contributions["totalCommitContributions"],
+        "total_commits_all_time": total_commits_all_time,
         "total_prs": contributions["totalPullRequestContributions"],
         "repos": user["repositories"]["totalCount"],
         "repos_with_commits": contributions["totalRepositoriesWithContributedCommits"],
@@ -176,8 +198,7 @@ def build_stats(user: dict) -> dict:
         "lines_removed": deletions,
         "net_lines": additions - deletions,
         "merged_prs": merged_prs,
-        "active_days_this_year": active_days,
-        "current_year_day": current_year_day,
+        "active_days": active_days,
         "total_contributions": calendar.get("totalContributions", 0),
         "languages": languages,
         "fetched_at": fetched_at,
@@ -190,9 +211,19 @@ def format_number(value: int) -> str:
 
 def load_font(size: int) -> ImageFont.FreeTypeFont:
     try:
-        return ImageFont.truetype(LOCAL_FONT_PATH, size)
+        return ImageFont.truetype(FONT_PATH, size)
     except OSError:
-        raise RuntimeError(f"Could not load font from {LOCAL_FONT_PATH}. Make sure the file exists and is a valid TTF font.")
+        raise RuntimeError(f"Could not load font from {FONT_PATH}. Make sure the file exists and is a valid TTF font.")
+
+
+def load_emoji_font(size: int) -> ImageFont.FreeTypeFont | None:
+    candidates = ("seguiemj.ttf", "Segoe UI Emoji", "NotoColorEmoji.ttf")
+    for candidate in candidates:
+        try:
+            return ImageFont.truetype(candidate, size)
+        except OSError:
+            continue
+    return None
 
 
 def format_datetime(iso_str: str) -> str:
@@ -201,27 +232,33 @@ def format_datetime(iso_str: str) -> str:
 
 
 def format_uptime_since_birthday() -> str:
-    birthday = datetime(2000, 5, 31, tzinfo=timezone.utc)
-    now_utc = datetime.now(timezone.utc)
-    if now_utc < birthday:
+    if NOW_DT < BIRTHDAY:
         return "not started"
 
-    delta = now_utc - birthday
+    now_utc_plus_1 = NOW_DT + timedelta(hours=1)
+    birthday_local = BIRTHDAY + timedelta(hours=1)
+
+    years = now_utc_plus_1.year - birthday_local.year
+    if (now_utc_plus_1.month, now_utc_plus_1.day) < (birthday_local.month, birthday_local.day):
+        years -= 1
+
+    last_birthday = birthday_local.replace(year=birthday_local.year + years)
+    delta = now_utc_plus_1 - last_birthday
     total_seconds = int(delta.total_seconds())
-    total_days = delta.days
-    years = total_days // 365
-    days = total_days % 365
-    hours = (total_seconds % 86400) // 3600
-    return f"{years}y {days}d {hours}h"
+    days = total_seconds // 86400
+    uptime = f"{years}y {days}d"
+    if now_utc_plus_1.month == BIRTHDAY_MONTH and now_utc_plus_1.day == BIRTHDAY_DAY:
+        return f"{BIRTHDAY_EMOJI} {uptime}"
+    return uptime
 
 
-def make_row(label: str, value: str, width: int = 68) -> str:
+def make_row(label: str, value: str, width: int = 68, dot_shift_left: int = 0) -> str:
     inner_width = width
     left = f"{label} "
     if len(left) + len(value) > inner_width:
         trim_to = max(1, inner_width - len(value) - 1)
         left = f"{label[:trim_to]} "
-    dots = "." * max(1, inner_width - len(left) - len(value) - 1)
+    dots = "." * max(1, inner_width - len(left) - len(value) - 1 - dot_shift_left)
     return f"{left}{dots} {value}"
 
 
@@ -243,6 +280,7 @@ def render_image(stats: dict, cached: bool) -> None:
     PADDING_Y = 22
 
     font = load_font(FONT_SIZE)
+    emoji_font = load_emoji_font(FONT_SIZE)
     probe = Image.new("RGB", (10, 10), COLOR_BG)
     probe_draw = ImageDraw.Draw(probe)
     char_box = probe_draw.textbbox((0, 0), "M", font=font)
@@ -250,14 +288,16 @@ def render_image(stats: dict, cached: bool) -> None:
     char_width = char_box[2] - char_box[0]
     line_height = (line_box[3] - line_box[1]) + 6
 
-    cache_tag = "cached" if cached else "fresh"
+    uptime_value = format_uptime_since_birthday()
+    uptime_dot_shift = 2 if uptime_value.startswith(BIRTHDAY_EMOJI) else 0
+
     lines: list[tuple[str, tuple[int, int, int], str | None, tuple[int, int, int] | None]] = [
         (make_title("ABOUT ME", ROW_WIDTH), COLOR_TEAL, None, None),
         (make_row("Name", stats["display_name"], ROW_WIDTH), COLOR_WHITE, None, None),
-        (make_row("Uptime", format_uptime_since_birthday(), ROW_WIDTH), COLOR_WHITE, None, None),
+        (make_row("Uptime", uptime_value, ROW_WIDTH, dot_shift_left=uptime_dot_shift), COLOR_WHITE, None, None),
         ("", COLOR_WHITE, None, None),
         (make_title("GITHUB INFO", ROW_WIDTH), COLOR_GREEN, None, None),
-        (make_row("Commits (year)", format_number(stats["total_commits"]), ROW_WIDTH), COLOR_WHITE, None, None),
+        (make_row("Commits", format_number(stats["total_commits_all_time"]), ROW_WIDTH), COLOR_WHITE, None, None),
         (make_row("Public repos", format_number(stats["repos"]), ROW_WIDTH), COLOR_WHITE, None, None),
         (
             make_row("Lines added", f"++ {format_number(stats['lines_added'])}", ROW_WIDTH),
@@ -273,12 +313,11 @@ def render_image(stats: dict, cached: bool) -> None:
         ),
         (make_row("Net lines", f"{stats['net_lines']:+,}", ROW_WIDTH), COLOR_WHITE, None, None),
         (
-            make_row("Active days (this year)", f"{stats['active_days_this_year']} / {stats['current_year_day']}", ROW_WIDTH),
+            make_row("Active days", f"{stats['active_days']}", ROW_WIDTH),
             COLOR_WHITE,
             None,
             None,
         ),
-        (make_row("Contributions", format_number(stats["total_contributions"]), ROW_WIDTH), COLOR_WHITE, None, None),
         ("", COLOR_WHITE, None, None),
         (make_title("TOP LANGUAGES", ROW_WIDTH), COLOR_RED, None, None),
     ]
@@ -297,7 +336,15 @@ def render_image(stats: dict, cached: bool) -> None:
 
     y = PADDING_Y
     for text, color, highlight_text, highlight_color in lines:
-        draw.text((PADDING_X, y), text, font=font, fill=color)
+        if BIRTHDAY_EMOJI in text and emoji_font is not None:
+            prefix, suffix = text.split(BIRTHDAY_EMOJI, 1)
+            draw.text((PADDING_X, y), prefix, font=font, fill=color)
+            prefix_width = draw.textlength(prefix, font=font)
+            draw.text((PADDING_X + prefix_width, y), BIRTHDAY_EMOJI, font=emoji_font, fill=color)
+            emoji_width = draw.textlength(BIRTHDAY_EMOJI, font=emoji_font)
+            draw.text((PADDING_X + prefix_width + emoji_width, y), suffix, font=font, fill=color)
+        else:
+            draw.text((PADDING_X, y), text, font=font, fill=color)
         if highlight_text and highlight_color:
             highlight_index = text.rfind(highlight_text)
             if highlight_index >= 0:
@@ -309,11 +356,10 @@ def render_image(stats: dict, cached: bool) -> None:
 
 def update_readme(stats: dict, cached: bool) -> None:
     cache_tag = "yes" if cached else "no"
+    rendered_utc_plus_1 = datetime.now(timezone.utc) + timedelta(hours=1)
     readme_content = (
-        f"# Hi, I'm {stats['display_name']}\n\n"
-        "## GitHub summary (generated PNG)\n\n"
         f"![GitHub summary]({IMAGE_PATH.name})\n\n"
-        f"_Last updated: {format_datetime(stats['fetched_at'])} UTC - cached: {cache_tag}_\n"
+        f"_Last updated: {format_datetime(rendered_utc_plus_1.isoformat())} UTC+1 - cached: {cache_tag}_\n"
     )
     Path("README.md").write_text(readme_content, encoding="utf-8")
 
