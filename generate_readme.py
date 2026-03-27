@@ -38,12 +38,12 @@ query ($login: String!) {
     contributionsCollection {
       totalCommitContributions
       totalPullRequestContributions
-      totalIssueContributions
       totalRepositoriesWithContributedCommits
       contributionCalendar {
         totalContributions
         weeks {
           contributionDays {
+            date
             contributionCount
           }
         }
@@ -100,7 +100,8 @@ def save_cache(data: dict) -> None:
 
 def get_stats() -> tuple[dict, bool]:
     cached = load_cache()
-    if cached:
+    required_keys = {"active_days_this_year", "current_year_day", "languages", "fetched_at"}
+    if cached and required_keys.issubset(cached):
         return cached, True
     raw = run_query(QUERY, {"login": USERNAME})["user"]
     stats = build_stats(raw)
@@ -113,11 +114,14 @@ def build_stats(user: dict) -> dict:
     calendar = contributions["contributionCalendar"] or {}
 
     weeks = calendar.get("weeks") or []
+    now_utc = datetime.now(timezone.utc)
+    current_year = now_utc.year
+    current_year_day = now_utc.timetuple().tm_yday
     active_days = sum(
         1
         for week in weeks
         for day in week.get("contributionDays", [])
-        if day.get("contributionCount", 0) > 0
+        if day.get("contributionCount", 0) > 0 and day.get("date", "").startswith(f"{current_year}-")
     )
 
     additions = deletions = merged_prs = 0
@@ -166,14 +170,14 @@ def build_stats(user: dict) -> dict:
         "display_name": user.get("name") or user["login"],
         "total_commits": contributions["totalCommitContributions"],
         "total_prs": contributions["totalPullRequestContributions"],
-        "total_issues": contributions["totalIssueContributions"],
         "repos": user["repositories"]["totalCount"],
         "repos_with_commits": contributions["totalRepositoriesWithContributedCommits"],
         "lines_added": additions,
         "lines_removed": deletions,
         "net_lines": additions - deletions,
         "merged_prs": merged_prs,
-        "active_days": active_days,
+        "active_days_this_year": active_days,
+        "current_year_day": current_year_day,
         "total_contributions": calendar.get("totalContributions", 0),
         "languages": languages,
         "fetched_at": fetched_at,
@@ -191,78 +195,114 @@ def load_font(size: int) -> ImageFont.FreeTypeFont:
         raise RuntimeError(f"Could not load font from {LOCAL_FONT_PATH}. Make sure the file exists and is a valid TTF font.")
 
 
+def format_datetime(iso_str: str) -> str:
+    dt = datetime.fromisoformat(iso_str)
+    return dt.strftime("%Y-%m-%d %H:%M:%S")
+
+
+def format_uptime_since_birthday() -> str:
+    birthday = datetime(2000, 5, 31, tzinfo=timezone.utc)
+    now_utc = datetime.now(timezone.utc)
+    if now_utc < birthday:
+        return "not started"
+
+    delta = now_utc - birthday
+    total_seconds = int(delta.total_seconds())
+    total_days = delta.days
+    years = total_days // 365
+    days = total_days % 365
+    hours = (total_seconds % 86400) // 3600
+    return f"{years}y {days}d {hours}h"
+
+
+def make_row(label: str, value: str, width: int = 68) -> str:
+    inner_width = width
+    left = f"{label} "
+    if len(left) + len(value) > inner_width:
+        trim_to = max(1, inner_width - len(value) - 1)
+        left = f"{label[:trim_to]} "
+    dots = "." * max(1, inner_width - len(left) - len(value) - 1)
+    return f"{left}{dots} {value}"
+
+
+def make_title(title: str, width: int = 68) -> str:
+    return f" {title} ".center(width, "-")
+
+
 def render_image(stats: dict, cached: bool) -> None:
-    width, height = 1200, 680
-    background = (15, 23, 42)
-    text_color = (226, 232, 240)
-    accent_color = (248, 113, 113)
+    # 3 customizable terminal accent colors (white is separate base text color).
+    COLOR_BG = (8, 16, 20)
+    COLOR_WHITE = (232, 241, 247)
+    COLOR_TEAL = (45, 212, 191)
+    COLOR_GREEN = (134, 239, 172)
+    COLOR_RED = (248, 113, 113)
 
-    image = Image.new("RGB", (width, height), background)
-    draw = ImageDraw.Draw(image)
-    heading_font = load_font(48)
-    stat_font = load_font(36)
-    small_font = load_font(22)
+    FONT_SIZE = 16
+    ROW_WIDTH = 68
+    PADDING_X = 26
+    PADDING_Y = 22
 
-    title = f"{stats['display_name']}'s GitHub summary"
-    draw.text((40, 40), title, font=heading_font, fill=text_color)
-    draw.rectangle((40, 98, width - 40, 102), fill=accent_color)
-
-    stat_items = [
-        ("Commits (year)", format_number(stats["total_commits"])),
-        ("Public repos", format_number(stats["repos"])),
-        ("Pull requests", format_number(stats["total_prs"])),
-        ("Merged PRs", format_number(stats["merged_prs"])),
-        ("Issues opened", format_number(stats["total_issues"])),
-        ("Repos with commits", format_number(stats["repos_with_commits"])),
-        ("Lines added", f"+{format_number(stats['lines_added'])}"),
-        ("Lines removed", f"-{format_number(stats['lines_removed'])}"),
-        ("Net lines", f"{stats['net_lines']:+,}"),
-        ("Active days", f"{stats['active_days']} / 365"),
-        ("Contributions", format_number(stats["total_contributions"])),
-    ]
-
-    x_label = 40
-    x_value = 440
-    y = 130
-    for label, value in stat_items:
-        draw.text((x_label, y), label, font=stat_font, fill=text_color)
-        draw.text((x_value, y), value, font=stat_font, fill=accent_color)
-        y += 46
-
-    lang_x = 640
-    lang_y = 140
-    draw.text((lang_x, 130), "Top languages", font=stat_font, fill=text_color)
-    bar_start = lang_x
-    bar_width = 420
-    bar_height = 18
-    gap = 50
-    if stats["languages"]:
-        for index, language in enumerate(stats["languages"]):
-            line_y = lang_y + gap * index
-            draw.text((lang_x, line_y), f"{language['name']}", font=stat_font, fill=text_color)
-            percent_text = f"{language['percent']:.1f}%"
-            draw.text((lang_x + bar_width + 20, line_y), percent_text, font=stat_font, fill=accent_color)
-            bar_y = line_y + 35
-            fill_width = int(bar_width * (language["percent"] / 100))
-            draw.rectangle(
-                (bar_start, bar_y, bar_start + bar_width, bar_y + bar_height),
-                outline=text_color,
-            )
-            if fill_width:
-                draw.rectangle(
-                    (bar_start, bar_y, bar_start + fill_width, bar_y + bar_height),
-                    fill=accent_color,
-                )
-    else:
-        draw.text((lang_x, lang_y + 20), "Language data not available", font=stat_font, fill=text_color)
+    font = load_font(FONT_SIZE)
+    probe = Image.new("RGB", (10, 10), COLOR_BG)
+    probe_draw = ImageDraw.Draw(probe)
+    char_box = probe_draw.textbbox((0, 0), "M", font=font)
+    line_box = probe_draw.textbbox((0, 0), "Mg", font=font)
+    char_width = char_box[2] - char_box[0]
+    line_height = (line_box[3] - line_box[1]) + 6
 
     cache_tag = "cached" if cached else "fresh"
-    draw.text(
-        (40, height - 40),
-        f"Last refreshed: {stats['fetched_at']} UTC - cache: {cache_tag}",
-        font=small_font,
-        fill=text_color,
-    )
+    lines: list[tuple[str, tuple[int, int, int], str | None, tuple[int, int, int] | None]] = [
+        (make_title("ABOUT ME", ROW_WIDTH), COLOR_TEAL, None, None),
+        (make_row("Name", stats["display_name"], ROW_WIDTH), COLOR_WHITE, None, None),
+        (make_row("Uptime", format_uptime_since_birthday(), ROW_WIDTH), COLOR_WHITE, None, None),
+        ("", COLOR_WHITE, None, None),
+        (make_title("GITHUB INFO", ROW_WIDTH), COLOR_GREEN, None, None),
+        (make_row("Commits (year)", format_number(stats["total_commits"]), ROW_WIDTH), COLOR_WHITE, None, None),
+        (make_row("Public repos", format_number(stats["repos"]), ROW_WIDTH), COLOR_WHITE, None, None),
+        (
+            make_row("Lines added", f"++ {format_number(stats['lines_added'])}", ROW_WIDTH),
+            COLOR_WHITE,
+            f"++ {format_number(stats['lines_added'])}",
+            COLOR_GREEN,
+        ),
+        (
+            make_row("Lines removed", f"-- {format_number(stats['lines_removed'])}", ROW_WIDTH),
+            COLOR_WHITE,
+            f"-- {format_number(stats['lines_removed'])}",
+            COLOR_RED,
+        ),
+        (make_row("Net lines", f"{stats['net_lines']:+,}", ROW_WIDTH), COLOR_WHITE, None, None),
+        (
+            make_row("Active days (this year)", f"{stats['active_days_this_year']} / {stats['current_year_day']}", ROW_WIDTH),
+            COLOR_WHITE,
+            None,
+            None,
+        ),
+        (make_row("Contributions", format_number(stats["total_contributions"]), ROW_WIDTH), COLOR_WHITE, None, None),
+        ("", COLOR_WHITE, None, None),
+        (make_title("TOP LANGUAGES", ROW_WIDTH), COLOR_RED, None, None),
+    ]
+
+    if stats["languages"]:
+        for language in stats["languages"]:
+            lang_value = f"{language['percent']:.1f}%"
+            lines.append((make_row(language["name"], lang_value, ROW_WIDTH), COLOR_WHITE, None, None))
+    else:
+        lines.append((make_row("Languages", "No data", ROW_WIDTH), COLOR_WHITE, None, None))
+
+    image_width = int((PADDING_X * 2) + (ROW_WIDTH * char_width))
+    image_height = int((PADDING_Y * 2) + (line_height * len(lines)))
+    image = Image.new("RGB", (image_width, image_height), COLOR_BG)
+    draw = ImageDraw.Draw(image)
+
+    y = PADDING_Y
+    for text, color, highlight_text, highlight_color in lines:
+        draw.text((PADDING_X, y), text, font=font, fill=color)
+        if highlight_text and highlight_color:
+            highlight_index = text.rfind(highlight_text)
+            if highlight_index >= 0:
+                draw.text((PADDING_X + (highlight_index * char_width), y), highlight_text, font=font, fill=highlight_color)
+        y += line_height
 
     image.save(IMAGE_PATH)
 
@@ -273,7 +313,7 @@ def update_readme(stats: dict, cached: bool) -> None:
         f"# Hi, I'm {stats['display_name']}\n\n"
         "## GitHub summary (generated PNG)\n\n"
         f"![GitHub summary]({IMAGE_PATH.name})\n\n"
-        f"_Last updated: {stats['fetched_at']} UTC - cached: {cache_tag}_\n"
+        f"_Last updated: {format_datetime(stats['fetched_at'])} UTC - cached: {cache_tag}_\n"
     )
     Path("README.md").write_text(readme_content, encoding="utf-8")
 
