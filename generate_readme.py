@@ -6,7 +6,7 @@ import requests
 from PIL import Image, ImageDraw, ImageFont
 
 USERNAME = "wiktorspryszynski"
-BIRTHDAY_DAY, BIRTHDAY_MONTH, BIRTHDAY_YEAR = 27, 3, 2000
+BIRTHDAY_DAY, BIRTHDAY_MONTH, BIRTHDAY_YEAR = 31, 5, 2000
 BIRTHDAY = datetime(BIRTHDAY_YEAR, BIRTHDAY_MONTH, BIRTHDAY_DAY, tzinfo=timezone.utc)
 GRAPHQL_URL = "https://api.github.com/graphql"
 IMAGE_PATH = Path("profile_summary.png")
@@ -266,6 +266,29 @@ def make_title(title: str, width: int = 68) -> str:
     return f" {title} ".center(width, "-")
 
 
+def draw_cake_icon(draw: ImageDraw.ImageDraw, x: float, y: float, size: int) -> float:
+    plate = (212, 220, 228)
+    cake = (250, 199, 214)
+    icing = (255, 241, 246)
+    candle = (95, 223, 160)
+    flame = (255, 196, 74)
+
+    icon_w = max(12, int(size * 0.95))
+    icon_h = max(12, int(size * 0.95))
+    base_y = y + int(size * 0.8)
+
+    draw.rectangle((x + 1, base_y, x + icon_w - 1, base_y + 2), fill=plate)
+    draw.rectangle((x + 2, base_y - 7, x + icon_w - 2, base_y), fill=cake)
+    draw.rectangle((x + 2, base_y - 10, x + icon_w - 2, base_y - 7), fill=icing)
+    candle_x = x + icon_w // 2
+    draw.rectangle((candle_x, base_y - 15, candle_x + 1, base_y - 10), fill=candle)
+    draw.polygon(
+        [(candle_x + 1, base_y - 19), (candle_x - 1, base_y - 16), (candle_x + 3, base_y - 16)],
+        fill=flame,
+    )
+    return float(icon_w + 3)
+
+
 def render_image(stats: dict, cached: bool) -> None:
     # 3 customizable terminal accent colors (white is separate base text color).
     COLOR_BG = (8, 16, 20)
@@ -331,18 +354,28 @@ def render_image(stats: dict, cached: bool) -> None:
 
     image_width = int((PADDING_X * 2) + (ROW_WIDTH * char_width))
     image_height = int((PADDING_Y * 2) + (line_height * len(lines)))
-    image = Image.new("RGB", (image_width, image_height), COLOR_BG)
+    image = Image.new("RGBA", (image_width, image_height), COLOR_BG + (255,))
     draw = ImageDraw.Draw(image)
 
     y = PADDING_Y
     for text, color, highlight_text, highlight_color in lines:
-        if BIRTHDAY_EMOJI in text and emoji_font is not None:
+        if BIRTHDAY_EMOJI in text:
             prefix, suffix = text.split(BIRTHDAY_EMOJI, 1)
             draw.text((PADDING_X, y), prefix, font=font, fill=color)
             prefix_width = draw.textlength(prefix, font=font)
-            draw.text((PADDING_X + prefix_width, y), BIRTHDAY_EMOJI, font=emoji_font, fill=color)
-            emoji_width = draw.textlength(BIRTHDAY_EMOJI, font=emoji_font)
-            draw.text((PADDING_X + prefix_width + emoji_width, y), suffix, font=font, fill=color)
+            cake_x = PADDING_X + prefix_width
+            emoji_width = 0.0
+            emoji_rendered = False
+            if emoji_font is not None:
+                try:
+                    draw.text((cake_x, y), BIRTHDAY_EMOJI, font=emoji_font, embedded_color=True)
+                    emoji_width = draw.textlength(BIRTHDAY_EMOJI, font=emoji_font)
+                    emoji_rendered = True
+                except Exception:
+                    emoji_rendered = False
+            if not emoji_rendered:
+                emoji_width = draw_cake_icon(draw, cake_x, y, FONT_SIZE)
+            draw.text((cake_x + emoji_width, y), suffix, font=font, fill=color)
         else:
             draw.text((PADDING_X, y), text, font=font, fill=color)
         if highlight_text and highlight_color:
