@@ -313,7 +313,7 @@ def render_image(stats: dict, cached: bool) -> None:
         ),
         (make_row("Net lines", f"{stats['net_lines']:+,}", ROW_WIDTH), COLOR_WHITE, None, None),
         (
-            make_row("Active days", f"{stats['active_days']}", ROW_WIDTH),
+            make_row("Active days (this year)", f"{stats['active_days']}", ROW_WIDTH),
             COLOR_WHITE,
             None,
             None,
