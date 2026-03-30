@@ -13,6 +13,7 @@ GRAPHQL_URL = "https://api.github.com/graphql"
 IMAGE_PATH = Path("profile_summary.png")
 CACHE_PATH = Path("cache/github_stats.json")
 FONT_PATH = Path("./fonts/CascadiaCode.ttf")
+LOCAL_UTC_OFFSET_HOURS = 2
 NOW_DT = datetime.now(timezone.utc)
 CACHE_TTL_SECONDS = 60 * 60  # keep cached payload for one hour
 TOKEN = os.environ.get("GH_TOKEN")
@@ -409,10 +410,11 @@ def render_image(stats: dict, cached: bool) -> None:
 
 def update_readme(stats: dict, cached: bool) -> None:
     cache_tag = "yes" if cached else "no"
-    rendered_utc_plus_1 = datetime.now(timezone.utc) + timedelta(hours=1)
+    rendered_local = datetime.now(timezone.utc) + timedelta(hours=LOCAL_UTC_OFFSET_HOURS)
+    utc_label = f"UTC{LOCAL_UTC_OFFSET_HOURS:+d}"
     readme_content = (
         f"![GitHub summary]({IMAGE_PATH.name})\n\n"
-        f"_Last updated: {format_datetime(rendered_utc_plus_1.isoformat())} UTC+1 - cached: {cache_tag}_\n"
+        f"_Last updated: {format_datetime(rendered_local.isoformat())} {utc_label} - cached: {cache_tag}_\n"
     )
     Path("README.md").write_text(readme_content, encoding="utf-8")
 
