@@ -1,4 +1,5 @@
 import json
+import math
 import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -289,6 +290,11 @@ def draw_cake_icon(draw: ImageDraw.ImageDraw, x: float, y: float, size: int) -> 
     return float(icon_w + 3)
 
 
+def cake_icon_width(size: int) -> float:
+    icon_w = max(12, int(size * 0.95))
+    return float(icon_w + 3)
+
+
 def render_image(stats: dict, cached: bool) -> None:
     # 3 customizable terminal accent colors (white is separate base text color).
     COLOR_BG = (8, 16, 20)
@@ -306,10 +312,8 @@ def render_image(stats: dict, cached: bool) -> None:
     emoji_font = load_emoji_font(FONT_SIZE)
     probe = Image.new("RGB", (10, 10), COLOR_BG)
     probe_draw = ImageDraw.Draw(probe)
-    char_box = probe_draw.textbbox((0, 0), "M", font=font)
-    line_box = probe_draw.textbbox((0, 0), "Mg", font=font)
-    char_width = char_box[2] - char_box[0]
-    line_height = (line_box[3] - line_box[1]) + 6
+    ascent, descent = font.getmetrics()
+    line_height = ascent + descent + 6
 
     uptime_value = format_uptime_since_birthday()
     uptime_dot_shift = 2 if uptime_value.startswith(BIRTHDAY_EMOJI) else 0
@@ -348,8 +352,26 @@ def render_image(stats: dict, cached: bool) -> None:
     else:
         lines.append((make_row("Languages", "No data", ROW_WIDTH), COLOR_WHITE, None, None))
 
-    image_width = int((PADDING_X * 2) + (ROW_WIDTH * char_width))
-    image_height = int((PADDING_Y * 2) + (line_height * len(lines)))
+    max_line_width = 0.0
+    for text, _, _, _ in lines:
+        if BIRTHDAY_EMOJI in text:
+            prefix, suffix = text.split(BIRTHDAY_EMOJI, 1)
+            emoji_width = (
+                probe_draw.textlength(BIRTHDAY_EMOJI, font=emoji_font)
+                if emoji_font is not None
+                else cake_icon_width(FONT_SIZE)
+            )
+            line_width = (
+                probe_draw.textlength(prefix, font=font)
+                + emoji_width
+                + probe_draw.textlength(suffix, font=font)
+            )
+        else:
+            line_width = probe_draw.textlength(text, font=font)
+        max_line_width = max(max_line_width, line_width)
+
+    image_width = int(math.ceil((PADDING_X * 2) + max_line_width)) + 4
+    image_height = int(math.ceil((PADDING_Y * 2) + (line_height * len(lines)))) + 4
     image = Image.new("RGBA", (image_width, image_height), COLOR_BG + (255,))
     draw = ImageDraw.Draw(image)
 
@@ -377,7 +399,9 @@ def render_image(stats: dict, cached: bool) -> None:
         if highlight_text and highlight_color:
             highlight_index = text.rfind(highlight_text)
             if highlight_index >= 0:
-                draw.text((PADDING_X + (highlight_index * char_width), y), highlight_text, font=font, fill=highlight_color)
+                prefix = text[:highlight_index]
+                highlight_x = PADDING_X + draw.textlength(prefix, font=font)
+                draw.text((highlight_x, y), highlight_text, font=font, fill=highlight_color)
         y += line_height
 
     image.save(IMAGE_PATH)
