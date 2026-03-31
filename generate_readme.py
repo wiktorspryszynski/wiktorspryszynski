@@ -22,6 +22,19 @@ BIRTHDAY_EMOJI = "\U0001F382"
 if not TOKEN:
     raise SystemExit("GH_TOKEN environment variable must be set before running this script.")
 
+# Display row definitions are kept at the top so labels/keys are easy to tweak.
+ABOUT_ME_STAT_ROWS = [
+    ("Name", "display_name"),
+]
+ABOUT_ME_STATIC_ROWS = [
+    ("Favorite show", "Naruto"),
+    ("Current OS", "Windows 11, EndeavourOS"),
+]
+GITHUB_COUNT_ROWS = [
+    ("Commits", "total_commits_all_time"),
+    ("Public repos", "repos"),
+]
+
 QUERY = """
 query ($login: String!) {
   user(login: $login) {
@@ -319,39 +332,52 @@ def render_image(stats: dict, cached: bool) -> None:
     uptime_value = format_uptime_since_birthday()
     uptime_dot_shift = 2 if uptime_value.startswith(BIRTHDAY_EMOJI) else 0
 
-    lines: list[tuple[str, tuple[int, int, int], str | None, tuple[int, int, int] | None]] = [
-        (make_title("ABOUT ME", ROW_WIDTH), COLOR_TEAL, None, None),
-        (make_row("Name", stats["display_name"], ROW_WIDTH), COLOR_WHITE, None, None),
-        (make_row("Uptime", uptime_value, ROW_WIDTH, dot_shift_left=uptime_dot_shift), COLOR_WHITE, None, None),
-        ("", COLOR_WHITE, None, None),
-        (make_title("GITHUB INFO", ROW_WIDTH), COLOR_GREEN, None, None),
-        (make_row("Commits", format_number(stats["total_commits_all_time"]), ROW_WIDTH), COLOR_WHITE, None, None),
-        (make_row("Public repos", format_number(stats["repos"]), ROW_WIDTH), COLOR_WHITE, None, None),
-        # Only keep the colored lines for lines added/removed
-        (
+    def make_line(
+        text: str,
+        color: tuple[int, int, int] = COLOR_WHITE,
+        highlight_text: str | None = None,
+        highlight_color: tuple[int, int, int] | None = None,
+    ) -> tuple[str, tuple[int, int, int], str | None, tuple[int, int, int] | None]:
+        return text, color, highlight_text, highlight_color
+
+    lines: list[tuple[str, tuple[int, int, int], str | None, tuple[int, int, int] | None]] = []
+
+    def add_title(title: str, color: tuple[int, int, int]) -> None:
+        if lines:
+            lines.append(make_line(""))
+        lines.append(make_line(make_title(title, ROW_WIDTH), color))
+
+    add_title("ABOUT ME", COLOR_TEAL)
+    lines.extend(make_line(make_row(label, str(stats[stat_key]), ROW_WIDTH)) for label, stat_key in ABOUT_ME_STAT_ROWS)
+    lines.extend(make_line(make_row(label, value, ROW_WIDTH)) for label, value in ABOUT_ME_STATIC_ROWS)
+    lines.append(make_line(make_row("Uptime", uptime_value, ROW_WIDTH, dot_shift_left=uptime_dot_shift)))
+    add_title("GITHUB INFO", COLOR_GREEN)
+    lines.extend(make_line(make_row(label, format_number(stats[stat_key]), ROW_WIDTH)) for label, stat_key in GITHUB_COUNT_ROWS)
+    # Only keep the colored lines for lines added/removed
+    lines.append(
+        make_line(
             make_row("Lines added", f"++ {format_number(stats['lines_added'])}", ROW_WIDTH),
-            COLOR_WHITE,
-            f"++ {format_number(stats['lines_added'])}",
-            COLOR_GREEN,
-        ),
-        (
+            highlight_text=f"++ {format_number(stats['lines_added'])}",
+            highlight_color=COLOR_GREEN,
+        )
+    )
+    lines.append(
+        make_line(
             make_row("Lines removed", f"-- {format_number(stats['lines_removed'])}", ROW_WIDTH),
-            COLOR_WHITE,
-            f"-- {format_number(stats['lines_removed'])}",
-            COLOR_RED,
-        ),
-        (make_row("Net lines", f"{stats['net_lines']:+,}", ROW_WIDTH), COLOR_WHITE, None, None),
-        (make_row("Active days (this year)", f"{stats['active_days']}", ROW_WIDTH), COLOR_WHITE, None, None),
-        ("", COLOR_WHITE, None, None),
-        (make_title("TOP LANGUAGES", ROW_WIDTH), COLOR_RED, None, None),
-    ]
+            highlight_text=f"-- {format_number(stats['lines_removed'])}",
+            highlight_color=COLOR_RED,
+        )
+    )
+    lines.append(make_line(make_row("Net lines", f"{stats['net_lines']:+,}", ROW_WIDTH)))
+    lines.append(make_line(make_row("Active days (this year)", f"{stats['active_days']}", ROW_WIDTH)))
+    add_title("TOP LANGUAGES", COLOR_RED)
 
     if stats["languages"]:
         for language in stats["languages"]:
             lang_value = f"{language['percent']:.1f}%"
-            lines.append((make_row(language["name"], lang_value, ROW_WIDTH), COLOR_WHITE, None, None))
+            lines.append(make_line(make_row(language["name"], lang_value, ROW_WIDTH)))
     else:
-        lines.append((make_row("Languages", "No data", ROW_WIDTH), COLOR_WHITE, None, None))
+        lines.append(make_line(make_row("Languages", "No data", ROW_WIDTH)))
 
     max_line_width = 0.0
     for text, _, _, _ in lines:
