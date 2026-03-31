@@ -21,13 +21,6 @@ cd your_repo
 pip install -r requirements.txt
 ```
 
-**requirements.txt:**
-
-``` 
-requests
-pyfiglet
-pillow
-```
 
 ### 3️⃣ Create Fine-grained GitHub token
 
@@ -68,5 +61,3 @@ README will show the generated image:
 
 _Last update: YYYY-MM-DD HH:MM:SS UTC_
 ```
-
-Optional: change font in `pyfiglet` or colors in the Python script.
