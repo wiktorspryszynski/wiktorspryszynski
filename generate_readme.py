@@ -414,7 +414,7 @@ def update_readme(stats: dict, cached: bool) -> None:
     utc_label = f"UTC{LOCAL_UTC_OFFSET_HOURS:+d}"
     readme_content = (
         f"![GitHub summary]({IMAGE_PATH.name})\n\n"
-        f"_Last updated: {format_datetime(rendered_local.isoformat())} {utc_label} - cached: {cache_tag}_\n"
+        f"Last updated: {format_datetime(rendered_local.isoformat())} {utc_label} - cached: {cache_tag}\n"
     )
     Path("README.md").write_text(readme_content, encoding="utf-8")
 
