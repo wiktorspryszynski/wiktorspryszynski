@@ -316,6 +316,13 @@ def render_image(stats: dict, cached: bool) -> None:
     COLOR_TEAL = (45, 212, 191)
     COLOR_GREEN = (134, 239, 172)
     COLOR_RED = (248, 113, 113)
+    LANGUAGE_COLORS = [
+        (45, 212, 191),
+        (96, 165, 250),
+        (251, 191, 36),
+        (248, 113, 113),
+        (167, 139, 250),
+    ]
 
     FONT_SIZE = 16
     ROW_WIDTH = 68
@@ -372,13 +379,6 @@ def render_image(stats: dict, cached: bool) -> None:
     lines.append(make_line(make_row("Active days (this year)", f"{stats['active_days']}", ROW_WIDTH)))
     add_title("TOP LANGUAGES", COLOR_RED)
 
-    if stats["languages"]:
-        for language in stats["languages"]:
-            lang_value = f"{language['percent']:.1f}%"
-            lines.append(make_line(make_row(language["name"], lang_value, ROW_WIDTH)))
-    else:
-        lines.append(make_line(make_row("Languages", "No data", ROW_WIDTH)))
-
     max_line_width = 0.0
     for text, _, _, _ in lines:
         if BIRTHDAY_EMOJI in text:
@@ -397,8 +397,26 @@ def render_image(stats: dict, cached: bool) -> None:
             line_width = probe_draw.textlength(text, font=font)
         max_line_width = max(max_line_width, line_width)
 
-    image_width = int(math.ceil((PADDING_X * 2) + max_line_width)) + 4
-    image_height = int(math.ceil((PADDING_Y * 2) + (line_height * len(lines)))) + 4
+    legend_items = stats["languages"] if stats["languages"] else [{"name": "No data", "percent": 0.0}]
+    legend_label_width = 0.0
+    for idx, language in enumerate(legend_items):
+        if stats["languages"]:
+            legend_text = f"{language['name']}  {language['percent']:.1f}%"
+        else:
+            legend_text = language["name"]
+        legend_label_width = max(legend_label_width, probe_draw.textlength(legend_text, font=font))
+
+    chart_width = max(320.0, max_line_width - 40.0)
+    chart_total_width = chart_width + 30.0 + legend_label_width
+    content_width = max(max_line_width, chart_total_width)
+
+    bar_height = 20
+    chart_top_gap = 8
+    legend_row_height = line_height - 2
+    chart_block_height = chart_top_gap + bar_height + 10 + (legend_row_height * len(legend_items))
+
+    image_width = int(math.ceil((PADDING_X * 2) + content_width)) + 4
+    image_height = int(math.ceil((PADDING_Y * 2) + (line_height * len(lines)) + chart_block_height)) + 4
     image = Image.new("RGBA", (image_width, image_height), COLOR_BG + (255,))
     draw = ImageDraw.Draw(image)
 
@@ -430,6 +448,49 @@ def render_image(stats: dict, cached: bool) -> None:
                 highlight_x = PADDING_X + draw.textlength(prefix, font=font)
                 draw.text((highlight_x, y), highlight_text, font=font, fill=highlight_color)
         y += line_height
+
+    bar_x = PADDING_X
+    bar_y = y + chart_top_gap
+    bar_w = int(chart_width)
+    bar_h = bar_height
+    draw.rounded_rectangle((bar_x, bar_y, bar_x + bar_w, bar_y + bar_h), radius=8, outline=(60, 74, 88), width=1)
+
+    if stats["languages"]:
+        normalized = []
+        for language in stats["languages"]:
+            normalized.append(
+                {
+                    "name": language["name"],
+                    "percent": max(0.0, float(language["percent"])),
+                }
+            )
+
+        total_percent = sum(item["percent"] for item in normalized)
+        if total_percent > 0:
+            scaled = [{"name": item["name"], "percent": item["percent"] * 100 / total_percent} for item in normalized]
+        else:
+            scaled = normalized
+
+        cursor_x = bar_x
+        for idx, language in enumerate(scaled):
+            segment_w = int(round((language["percent"] / 100) * bar_w))
+            if idx == len(scaled) - 1:
+                segment_w = (bar_x + bar_w) - cursor_x
+            color = LANGUAGE_COLORS[idx % len(LANGUAGE_COLORS)]
+            if segment_w > 0:
+                draw.rectangle((cursor_x, bar_y, cursor_x + segment_w, bar_y + bar_h), fill=color)
+                cursor_x += segment_w
+
+        legend_y = bar_y + bar_h + 10
+        for idx, language in enumerate(stats["languages"]):
+            color = LANGUAGE_COLORS[idx % len(LANGUAGE_COLORS)]
+            swatch = 10
+            row_y = legend_y + (idx * legend_row_height)
+            draw.rectangle((bar_x, row_y + 4, bar_x + swatch, row_y + 4 + swatch), fill=color)
+            legend_text = f"{language['name']}  {language['percent']:.1f}%"
+            draw.text((bar_x + 16, row_y), legend_text, font=font, fill=COLOR_WHITE)
+    else:
+        draw.text((bar_x, bar_y + 2), "No language data available", font=font, fill=COLOR_WHITE)
 
     image.save(IMAGE_PATH)
 
