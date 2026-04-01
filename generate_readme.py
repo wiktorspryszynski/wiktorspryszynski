@@ -406,7 +406,7 @@ def render_image(stats: dict, cached: bool) -> None:
             legend_text = language["name"]
         legend_label_width = max(legend_label_width, probe_draw.textlength(legend_text, font=font))
 
-    chart_width = max(320.0, max_line_width - 40.0)
+    chart_width = max(320.0, max_line_width)
     chart_total_width = chart_width + 30.0 + legend_label_width
     content_width = max(max_line_width, chart_total_width)
 
