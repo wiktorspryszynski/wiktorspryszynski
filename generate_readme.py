@@ -379,7 +379,9 @@ def render_image(stats: dict, cached: bool) -> None:
     lines.append(make_line(make_row("Active days (this year)", f"{stats['active_days']}", ROW_WIDTH)))
     add_title("TOP LANGUAGES", COLOR_RED)
 
-    max_line_width = 0.0
+    # The row width in characters, so estimate pixel width for the rows
+    # Use a probe to measure the max row width in pixels
+    max_row_pixel_width = 0.0
     for text, _, _, _ in lines:
         if BIRTHDAY_EMOJI in text:
             prefix, suffix = text.split(BIRTHDAY_EMOJI, 1)
@@ -395,27 +397,19 @@ def render_image(stats: dict, cached: bool) -> None:
             )
         else:
             line_width = probe_draw.textlength(text, font=font)
-        max_line_width = max(max_line_width, line_width)
+        max_row_pixel_width = max(max_row_pixel_width, line_width)
 
-    legend_items = stats["languages"] if stats["languages"] else [{"name": "No data", "percent": 0.0}]
-    legend_label_width = 0.0
-    for idx, language in enumerate(legend_items):
-        if stats["languages"]:
-            legend_text = f"{language['name']}  {language['percent']:.1f}%"
-        else:
-            legend_text = language["name"]
-        legend_label_width = max(legend_label_width, probe_draw.textlength(legend_text, font=font))
+    # The image width is based on the row width in pixels plus equal padding
+    image_width = int(math.ceil((PADDING_X * 2) + max_row_pixel_width)) + 4
 
-    chart_width = max(320.0, max_line_width)
-    chart_total_width = chart_width + 30.0 + legend_label_width
-    content_width = max(max_line_width, chart_total_width)
-
+    # The chart and legend must fit within the same width as the rows
+    chart_width = max_row_pixel_width
     bar_height = 20
     chart_top_gap = 8
+    legend_items = stats["languages"] if stats["languages"] else [{"name": "No data", "percent": 0.0}]
     legend_row_height = line_height - 2
     chart_block_height = chart_top_gap + bar_height + 10 + (legend_row_height * len(legend_items))
 
-    image_width = int(math.ceil((PADDING_X * 2) + content_width)) + 4
     image_height = int(math.ceil((PADDING_Y * 2) + (line_height * len(lines)) + chart_block_height)) + 4
     image = Image.new("RGBA", (image_width, image_height), COLOR_BG + (255,))
     draw = ImageDraw.Draw(image)
@@ -449,6 +443,7 @@ def render_image(stats: dict, cached: bool) -> None:
                 draw.text((highlight_x, y), highlight_text, font=font, fill=highlight_color)
         y += line_height
 
+    # Draw the chart and legend within the same width as the rows
     bar_x = PADDING_X
     bar_y = y + chart_top_gap
     bar_w = int(chart_width)
