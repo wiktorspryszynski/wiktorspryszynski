@@ -326,6 +326,7 @@ def render_image(stats: dict, cached: bool) -> None:
 
     FONT_SIZE = 16
     ROW_WIDTH = 68
+    TARGET_IMAGE_WIDTH = 950
     PADDING_X = 26
     PADDING_Y = 22
 
@@ -399,8 +400,10 @@ def render_image(stats: dict, cached: bool) -> None:
             line_width = probe_draw.textlength(text, font=font)
         max_row_pixel_width = max(max_row_pixel_width, line_width)
 
-    # The image width is based on the row width in pixels plus equal padding
-    image_width = int(math.ceil((PADDING_X * 2) + max_row_pixel_width)) + 4
+    # Keep the generated image at least this wide for README presentation.
+    min_content_width = int(math.ceil((PADDING_X * 2) + max_row_pixel_width)) + 4
+    image_width = max(TARGET_IMAGE_WIDTH, min_content_width)
+    content_x = int((image_width - max_row_pixel_width) // 2)
 
     # The chart and legend must fit within the same width as the rows
     chart_width = max_row_pixel_width
@@ -418,9 +421,9 @@ def render_image(stats: dict, cached: bool) -> None:
     for text, color, highlight_text, highlight_color in lines:
         if BIRTHDAY_EMOJI in text:
             prefix, suffix = text.split(BIRTHDAY_EMOJI, 1)
-            draw.text((PADDING_X, y), prefix, font=font, fill=color)
+            draw.text((content_x, y), prefix, font=font, fill=color)
             prefix_width = draw.textlength(prefix, font=font)
-            cake_x = PADDING_X + prefix_width
+            cake_x = content_x + prefix_width
             emoji_width = 0.0
             emoji_rendered = False
             if emoji_font is not None:
@@ -434,17 +437,17 @@ def render_image(stats: dict, cached: bool) -> None:
                 emoji_width = draw_cake_icon(draw, cake_x, y, FONT_SIZE)
             draw.text((cake_x + emoji_width, y), suffix, font=font, fill=color)
         else:
-            draw.text((PADDING_X, y), text, font=font, fill=color)
+            draw.text((content_x, y), text, font=font, fill=color)
         if highlight_text and highlight_color:
             highlight_index = text.rfind(highlight_text)
             if highlight_index >= 0:
                 prefix = text[:highlight_index]
-                highlight_x = PADDING_X + draw.textlength(prefix, font=font)
+                highlight_x = content_x + draw.textlength(prefix, font=font)
                 draw.text((highlight_x, y), highlight_text, font=font, fill=highlight_color)
         y += line_height
 
     # Draw the chart and legend within the same width as the rows
-    bar_x = PADDING_X
+    bar_x = content_x
     bar_y = y + chart_top_gap
     bar_w = int(chart_width)
     bar_h = bar_height
