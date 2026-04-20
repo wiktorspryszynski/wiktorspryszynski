@@ -321,7 +321,7 @@ def cake_icon_width(size: int) -> float:
 
 def render_image(stats: dict, cached: bool) -> None:
     # 3 customizable terminal accent colors (white is separate base text color).
-    COLOR_BG = (8, 16, 20)
+    COLOR_BG = (13, 17, 23)
     COLOR_WHITE = (232, 241, 247)
     COLOR_TEAL = (45, 212, 191)
     COLOR_GREEN = (134, 239, 172)
