@@ -435,7 +435,7 @@ def render_image(stats: dict, cached: bool) -> None:
     chart_block_height = chart_top_gap + bar_height + 10 + (legend_row_height * len(legend_items))
 
     image_height = int(math.ceil((PADDING_Y * 2) + (line_height * len(lines)) + chart_block_height)) + 4
-    image = Image.new("RGBA", (image_width, image_height), COLOR_BG + (255,))
+    image = Image.new("RGB", (image_width, image_height), COLOR_BG)
     draw = ImageDraw.Draw(image)
 
     y = PADDING_Y
