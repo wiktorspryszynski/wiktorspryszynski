@@ -35,6 +35,16 @@ GITHUB_COUNT_ROWS = [
     ("Public repos", "repos"),
 ]
 
+MY_STACK = [
+    ("Python", "icons/python-icon.png"),
+    ("JavaScript", "icons/javascript-icon.png"),
+    ("TypeScript", "icons/typescript-icon.png"),
+    ("React", "icons/react-icon.png"),
+    ("SQL", "icons/sql-icon.png"),
+    ("PHP", "icons/PHP-icon.png"),
+]
+STACK_SENTINEL = "__MY_STACK__"
+
 QUERY = """
 query ($login: String!) {
   user(login: $login) {
@@ -316,6 +326,7 @@ def render_image(stats: dict, cached: bool) -> None:
     COLOR_TEAL = (45, 212, 191)
     COLOR_GREEN = (134, 239, 172)
     COLOR_RED = (248, 113, 113)
+    COLOR_PURPLE = (167, 139, 250)
     LANGUAGE_COLORS = [
         (45, 212, 191),
         (96, 165, 250),
@@ -378,6 +389,8 @@ def render_image(stats: dict, cached: bool) -> None:
     )
     lines.append(make_line(make_row("Net lines", f"{stats['net_lines']:+,}", ROW_WIDTH)))
     lines.append(make_line(make_row("Active days (this year)", f"{stats['active_days']}", ROW_WIDTH)))
+    add_title("MY STACK", COLOR_PURPLE)
+    lines.append((STACK_SENTINEL, COLOR_WHITE, None, None))
     add_title("TOP LANGUAGES", COLOR_RED)
 
     # The row width in characters, so estimate pixel width for the rows
@@ -396,6 +409,13 @@ def render_image(stats: dict, cached: bool) -> None:
                 + emoji_width
                 + probe_draw.textlength(suffix, font=font)
             )
+        elif text == STACK_SENTINEL:
+            icon_size = FONT_SIZE
+            line_width = probe_draw.textlength("[ ", font=font)
+            for i, (name, _) in enumerate(MY_STACK):
+                sep = ", " if i < len(MY_STACK) - 1 else ""
+                line_width += icon_size + 4 + probe_draw.textlength(name + sep, font=font)
+            line_width += probe_draw.textlength(" ]", font=font)
         else:
             line_width = probe_draw.textlength(text, font=font)
         max_row_pixel_width = max(max_row_pixel_width, line_width)
@@ -436,6 +456,23 @@ def render_image(stats: dict, cached: bool) -> None:
             if not emoji_rendered:
                 emoji_width = draw_cake_icon(draw, cake_x, y, FONT_SIZE)
             draw.text((cake_x + emoji_width, y), suffix, font=font, fill=color)
+        elif text == STACK_SENTINEL:
+            icon_size = FONT_SIZE
+            icon_top = y + (line_height - icon_size) // 2
+            cursor = float(content_x)
+            draw.text((cursor, y), "[ ", font=font, fill=COLOR_WHITE)
+            cursor += draw.textlength("[ ", font=font)
+            for i, (name, icon_path) in enumerate(MY_STACK):
+                try:
+                    icon = Image.open(icon_path).convert("RGBA").resize((icon_size, icon_size), Image.Resampling.LANCZOS)
+                    image.paste(icon, (int(cursor), icon_top), icon)
+                except Exception:
+                    pass
+                cursor += icon_size + 4
+                sep = ", " if i < len(MY_STACK) - 1 else ""
+                draw.text((cursor, y), name + sep, font=font, fill=COLOR_WHITE)
+                cursor += draw.textlength(name + sep, font=font)
+            draw.text((cursor, y), " ]", font=font, fill=COLOR_WHITE)
         else:
             draw.text((content_x, y), text, font=font, fill=color)
         if highlight_text and highlight_color:
