@@ -321,7 +321,7 @@ def cake_icon_width(size: int) -> float:
 
 def render_image(stats: dict, cached: bool) -> None:
     # 3 customizable terminal accent colors (white is separate base text color).
-    COLOR_BG = (8, 16, 20)
+    COLOR_BG = (13, 17, 23)
     COLOR_WHITE = (232, 241, 247)
     COLOR_TEAL = (45, 212, 191)
     COLOR_GREEN = (134, 239, 172)
@@ -435,7 +435,7 @@ def render_image(stats: dict, cached: bool) -> None:
     chart_block_height = chart_top_gap + bar_height + 10 + (legend_row_height * len(legend_items))
 
     image_height = int(math.ceil((PADDING_Y * 2) + (line_height * len(lines)) + chart_block_height)) + 4
-    image = Image.new("RGBA", (image_width, image_height), COLOR_BG + (255,))
+    image = Image.new("RGB", (image_width, image_height), COLOR_BG)
     draw = ImageDraw.Draw(image)
 
     y = PADDING_Y
