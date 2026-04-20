@@ -459,7 +459,7 @@ def render_image(stats: dict, cached: bool) -> None:
             draw.text((cake_x + emoji_width, y), suffix, font=font, fill=color)
         elif text == STACK_SENTINEL:
             icon_size = ICON_SIZE
-            icon_top = y + (line_height - icon_size) // 2 - 5
+            icon_top = y + (line_height - icon_size) // 2 - 3
             cursor = float(content_x)
             draw.text((cursor, y), "[ ", font=font, fill=COLOR_WHITE)
             cursor += draw.textlength("[ ", font=font)
