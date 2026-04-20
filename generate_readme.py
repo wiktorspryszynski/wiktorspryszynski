@@ -336,6 +336,7 @@ def render_image(stats: dict, cached: bool) -> None:
     ]
 
     FONT_SIZE = 16
+    ICON_SIZE = 13
     ROW_WIDTH = 68
     TARGET_IMAGE_WIDTH = 950
     PADDING_X = 26
@@ -410,7 +411,7 @@ def render_image(stats: dict, cached: bool) -> None:
                 + probe_draw.textlength(suffix, font=font)
             )
         elif text == STACK_SENTINEL:
-            icon_size = FONT_SIZE
+            icon_size = ICON_SIZE
             line_width = probe_draw.textlength("[ ", font=font)
             for i, (name, _) in enumerate(MY_STACK):
                 sep = ", " if i < len(MY_STACK) - 1 else ""
@@ -457,7 +458,7 @@ def render_image(stats: dict, cached: bool) -> None:
                 emoji_width = draw_cake_icon(draw, cake_x, y, FONT_SIZE)
             draw.text((cake_x + emoji_width, y), suffix, font=font, fill=color)
         elif text == STACK_SENTINEL:
-            icon_size = FONT_SIZE
+            icon_size = ICON_SIZE
             icon_top = y + (line_height - icon_size) // 2 - 5
             cursor = float(content_x)
             draw.text((cursor, y), "[ ", font=font, fill=COLOR_WHITE)
