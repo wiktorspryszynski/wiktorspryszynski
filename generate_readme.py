@@ -378,7 +378,7 @@ def render_image(stats: dict, cached: bool) -> None:
     )
     lines.append(make_line(make_row("Net lines", f"{stats['net_lines']:+,}", ROW_WIDTH)))
     lines.append(make_line(make_row("Active days (this year)", f"{stats['active_days']}", ROW_WIDTH)))
-    add_title("MY STACK", COLOR_RED)
+    add_title("TOP LANGUAGES", COLOR_RED)
 
     # The row width in characters, so estimate pixel width for the rows
     # Use a probe to measure the max row width in pixels
